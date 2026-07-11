@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:note_memoire/modele/utilisateur.dart';
 
+import '../../core/helpers/snackbar_helper.dart';
 import '../../core/validators/Validators.dart';
 import '../../widgets/custom_app_bar.dart';
 import '../../widgets/custom_button.dart';
@@ -78,6 +79,14 @@ class _AddNotePageState extends State<AddNotePage> {
 
       if (!mounted) return;
 
+      SnackBarHelper.success(
+
+        context,
+
+        "Note enregistrée avec succès.",
+
+      );
+      /*
       ScaffoldMessenger.of(context).showSnackBar(
 
         const SnackBar(
@@ -89,6 +98,8 @@ class _AddNotePageState extends State<AddNotePage> {
         ),
 
       );
+
+       */
 
       Navigator.pop(context, true);
 

@@ -4,14 +4,18 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/date_utils.dart';
 import '../../modele/note.dart';
 import '../../services/note_service.dart';
+import '../../widgets/app_drawer.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/note_card.dart';
+import '../auth/connexion.dart';
 import '../notes/add_note.dart';
 import '../../modele/utilisateur.dart';
 import '../notes/detail_note.dart';
 
 class Home extends StatefulWidget {
   final Utilisateur utilisateur;
+
+
 
   const Home({
     super.key,
@@ -34,25 +38,12 @@ class _HomeState extends State<Home> {
 
   bool _loading = true;
 
-  //--------------------------------------------------
-  // Chargement des notes
-  //--------------------------------------------------
+  bool _isSearching = false;
 
-  Future<void> _loadNotes() async {
+  final TextEditingController _searchController = TextEditingController();
 
-    setState(() {
-      _loading = true;
-    });
+  List<Note> _filteredNotes = [];
 
-    _notes = await NoteService.instance.getNotesByUser(
-      widget.utilisateur.idUtilisateur!,
-    );
-
-    setState(() {
-      _loading = false;
-    });
-
-  }
 
   //--------------------------------------------------
   // Initialisation
@@ -68,6 +59,231 @@ class _HomeState extends State<Home> {
   }
 
 
+
+  //--------------------------------------------------
+  // Chargement des notes
+  //--------------------------------------------------
+
+
+  Future<void> _loadNotes() async {
+
+    setState(() {
+      _loading = true;
+    });
+
+    try {
+
+      final notes = await NoteService.instance.getNotesByUser(
+        widget.utilisateur.idUtilisateur!,
+      );
+
+      setState(() {
+
+        _notes = notes;
+
+        _filteredNotes = List.from(notes);
+
+        _loading = false;
+
+      });
+
+    } catch (e) {
+
+      setState(() {
+        _loading = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Erreur : $e"),
+        ),
+      );
+
+    }
+
+  }
+
+  //--------------------------------------------------
+  // recherche
+  //--------------------------------------------------
+  void _filterNotes(String keyword) {
+
+    setState(() {
+
+      if (keyword.trim().isEmpty) {
+
+        _filteredNotes = List.from(_notes);
+
+      } else {
+
+        _filteredNotes = _notes.where((note) {
+
+          return note.title
+              .toLowerCase()
+              .contains(keyword.toLowerCase());
+
+        }).toList();
+
+      }
+
+    });
+
+  }
+
+
+  //--------------------------------------------------
+  // Suppression d'une note
+  //--------------------------------------------------
+
+  Future<void> _deleteNote(Note note) async {
+
+    final confirmation = await showDialog<bool>(
+
+      context: context,
+
+      builder: (context) {
+
+        return AlertDialog(
+
+          title: const Text("Supprimer la note"),
+
+          content: Text(
+            "Voulez-vous vraiment supprimer '${note.title}' ?",
+          ),
+
+          actions: [
+
+            TextButton(
+
+              onPressed: () {
+
+                Navigator.pop(context, false);
+
+              },
+
+              child: const Text("Annuler"),
+
+            ),
+
+            ElevatedButton(
+
+              onPressed: () {
+
+                Navigator.pop(context, true);
+
+              },
+
+              child: const Text("Supprimer"),
+
+            ),
+
+          ],
+
+        );
+
+      },
+
+    );
+
+    if (confirmation != true) {
+      return;
+    }
+
+    await NoteService.instance.deleteNote(note.idNote!);
+
+    _loadNotes();
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+
+      const SnackBar(
+
+        content: Text("Note supprimée avec succès."),
+
+      ),
+
+    );
+
+  }
+
+  //--------------------------------------------------
+  // Déconnexion
+  //--------------------------------------------------
+
+  Future<void> _logout() async {
+
+    final confirmation = await showDialog<bool>(
+
+      context: context,
+
+      builder: (context) {
+
+        return AlertDialog(
+
+          title: const Text("Déconnexion"),
+
+          content: const Text(
+            "Voulez-vous vraiment vous déconnecter ?",
+          ),
+
+          actions: [
+
+            TextButton(
+
+              onPressed: () {
+
+                Navigator.pop(context, false);
+
+              },
+
+              child: const Text("Annuler"),
+
+            ),
+
+            ElevatedButton(
+
+              onPressed: () {
+
+                Navigator.pop(context, true);
+
+              },
+
+              child: const Text("Déconnexion"),
+
+            ),
+
+          ],
+
+        );
+
+      },
+
+    );
+
+    if (confirmation != true) {
+
+      return;
+
+    }
+
+    Navigator.pushAndRemoveUntil(
+
+      context,
+
+      MaterialPageRoute(
+
+        builder: (_) => Connexion(),
+
+      ),
+
+          (route) => false,
+
+    );
+
+  }
+
+
   //=====================================
   // Interface
   //=====================================
@@ -78,13 +294,45 @@ class _HomeState extends State<Home> {
 
     return Scaffold(
 
-      drawer: Drawer(),
+      //drawer: Drawer()
+      /*
+      drawer: _isSearching ? null : Drawer(
+        // ton Drawer actuel
+      ),
+       */
+      /*
+      drawer: AppDrawer(
+
+        utilisateur: widget.utilisateur,
+
+      ),
+
+       */
+
+      drawer: AppDrawer(
+
+        utilisateur: widget.utilisateur,
+
+        onRefreshNotes: _loadNotes,
+
+        onLogout: _logout,
+
+      ),
 
       appBar: AppBar(
 
         centerTitle: true,
 
-        title: const Text(
+        title: _isSearching
+            ? TextField(
+          controller: _searchController,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: "Rechercher une note...",
+            border: InputBorder.none,
+          ),
+          onChanged: _filterNotes,
+        ) : const Text(
           "Liste des notes",
           style: TextStyle(
             color: AppColors.primary,
@@ -93,6 +341,73 @@ class _HomeState extends State<Home> {
           ),
         ),
 
+        actions: [
+
+          if (!_isSearching)
+
+            IconButton(
+
+              icon: const Icon(Icons.search),
+
+              onPressed: () {
+
+                setState(() {
+
+                  _isSearching = true;
+
+                });
+
+              },
+
+            ),
+
+          if (_isSearching)
+
+            IconButton(
+
+              icon: const Icon(Icons.close),
+
+              onPressed: () {
+
+                _searchController.clear();
+
+                _filterNotes("");
+
+                setState(() {
+
+                  _isSearching = false;
+
+                });
+
+              },
+
+            ),
+
+        ],
+        leading: _isSearching
+
+            ? IconButton(
+
+          icon: const Icon(Icons.arrow_back),
+
+          onPressed: () {
+
+            _searchController.clear();
+
+            _filterNotes("");
+
+            setState(() {
+
+              _isSearching = false;
+
+            });
+
+          },
+
+        )
+
+            : null,
+        /*
         actions: [
 
           IconButton(
@@ -105,6 +420,8 @@ class _HomeState extends State<Home> {
           )
 
         ],
+
+         */
       ),
 
       floatingActionButton: FloatingActionButton(
@@ -346,11 +663,13 @@ class _HomeState extends State<Home> {
     //----------------------------------
     return ListView.builder(
 
-      itemCount: _notes.length,
+      //itemCount: _notes.length,
+      itemCount: _filteredNotes.length,
 
       itemBuilder: (context, index) {
 
-        final note = _notes[index];
+        //final note = _notes[index];
+        final note = _filteredNotes[index];
 
         return NoteCard(
 
@@ -415,7 +734,13 @@ class _HomeState extends State<Home> {
             }
 
           },
+          onDelete: () {
 
+            _deleteNote(note);
+
+          },
+
+          /*
           onDelete: () async {
             final refresh = await Navigator.push(
 
@@ -439,7 +764,7 @@ class _HomeState extends State<Home> {
               _loadNotes();
 
             }
-          },
+          },*/
 
         );
         /*
